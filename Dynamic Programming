@@ -1,4 +1,6 @@
-# The data frame df_weeks contains the input data.
+# A mixed integer programming model for inventory replenishment planning for seasonal demand with discrete delivery times
+# R software is needed to run the model
+# The data frame df_weeks contains the input data. You can use the same data found in the paper, or just use your own data
 
 d=df_weeks$forecasting
 sigma=df_weeks$sigma
