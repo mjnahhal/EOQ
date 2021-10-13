@@ -1,0 +1,181 @@
+# The data frame df_weeks contains the input data.
+
+d=df_weeks$forecasting
+sigma=df_weeks$sigma
+
+H=5 # Inventory Holding Cost
+S=250 # Ordering costs
+
+z=1.645 # service level (95%)
+
+for (ijk in 1:33) # dynamic calculations until the week 33
+{
+
+  if (ijk==1)
+  { 
+    Po=752 # will be changed later
+    PO=752 
+  } else {
+     d=df_weeks$forecasting[ijk:50]
+     sigma=df_weeks$sigma[ijk:50]
+     Po=df_weeks2$inventory[1]
+     PO=df_weeks2$inventory[1]
+  }
+
+
+T=length(d)
+
+SIG=matrix(0,nrow=T,ncol=T)
+for(i in 1:T)
+  for (j in i:T)
+    SIG[i,j]=sqrt(sum(sigma[i:j]^2))
+
+
+D=matrix(0,nrow=T,ncol=T)
+for(i in 1:T)
+  for (j in i:T)
+    D[i,j]=sum(d[i:j])
+
+#########
+
+KK=sum(Po>D[1,] + z*SIG[1,]) # KK is initial period length
+
+if(KK>=1)
+{
+  Po=Po-D[1,KK]
+
+  C=0.5*KK/52*H*D[1,KK]+KK/52*H*Po
+  
+  d=d[(KK+1):length(d)]
+  T=length(d)
+  
+  sigma=sigma[(KK+1):length(sigma)]
+  
+  SIG=matrix(0,nrow=T,ncol=T)
+  for(i in 1:T)
+    for (j in i:T)
+      SIG[i,j]=sqrt(sum(sigma[i:j]^2))
+  
+  D=matrix(0,nrow=T,ncol=T)
+  for(i in 1:T)
+    for (j in i:T)
+      D[i,j]=sum(d[i:j])
+  
+} else
+  C=0
+
+############
+
+I=matrix(0,nrow=T,ncol=T)
+for(i in 1:T)
+  for (j in i:T)
+    I[i,j]= 0.5*((j-i)+1)/52*H*(sum(d[i:j]))
+
+Safety_stock_cost=matrix(0,nrow=T,ncol=T)
+SS=matrix(0,nrow=T,ncol=T)
+for(i in 1:T)
+  for (j in i:T)
+  {
+    SS[i,j]=round(z*SIG[i,j],digits = 0)
+    Safety_stock_cost[i,j]=H*(j-i+1)/52*SS[i,j] 
+  }
+
+f=matrix(0,nrow=T,ncol=T)
+for(i in 1:T)
+  for (j in i:T)
+    f[i,j]=I[i,j]+Safety_stock_cost[i,j]
+
+wi_o=matrix(0,nrow=T,ncol=T+1)
+Q_o=matrix(0,nrow=T,ncol=T+1)
+OF_o=matrix(0,nrow=T,ncol=T+1)
+
+# Dynamic Programming
+for (j in 2:(T+1))
+{
+  wi_o[1,j]=1
+  OF_o[1,j]=f[1,j-1]+S
+  
+}
+
+for (o in 2:T)
+{
+  for (j in 2:(T+1))
+  OF_o[o,j]=100000000
+  
+  for (j in (o+1): (T+1))
+  {
+    for (i in o: (j-1))
+    {
+      if(OF_o[o-1,i]+f[i,j-1]+S < OF_o[o,j] )
+      {
+        wi_o[o,j] = i
+
+        OF_o[o,j] = OF_o[o-1,i]+f[i,j-1]+S
+      }
+    }
+  }
+}
+
+print("Total Costs")
+print(min(OF_o[,T+1])+C)
+
+n=which.min(OF_o[,T+1])
+nn=order(1:n,decreasing = T)
+
+xi=1:n
+Costs=1:n
+
+
+Costs[nn[1]]= OF_o[nn[1],T+1]
+xi[nn[1]]=wi_o[nn[1],T+1]
+
+for (j in 2:n)
+{
+
+Costs[nn[j]]=OF_o[nn[j],xi[nn[j-1]]]
+xi[nn[j]]=wi_o[nn[j],xi[nn[j-1]]]
+
+Costs[nn[j]]=OF_o[nn[j],xi[nn[j-1]]]
+xi[nn[j]]=wi_o[nn[j],xi[nn[j-1]]] 
+}
+
+xj=c(xi[2:n]-1,T)
+
+print("Number of Lots")
+print(n)
+print("Weeks Assignment")
+print("Weeks Start")
+print(xi+KK)
+print("Weeks End")
+print(xj+KK)
+
+print("Safety Stock")
+for (j in 1:n)
+{
+  print(SS[xi[j],xj[j]])
+}
+
+j=1
+print("Lot Sizes")
+print(D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  Po  )
+
+df_weeks2=df_weeks[ijk:nrow(df_weeks),]
+
+df_weeks2$Q=0
+df_weeks2$Q[xi[j]+KK]=D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  Po
+
+for (j in 2:n)
+{
+  print(D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  SS[xi[j-1],xj[j-1]]  )
+  
+  df_weeks2$Q[xi[j]+KK]=D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  SS[xi[j-1],xj[j-1]]
+}
+
+df_weeks2$inventory=PO
+
+df_weeks2$inventory=df_weeks2$inventory-cumsum(df_weeks2$Weekly_Demand)+cumsum(df_weeks2$Q)
+
+}
+
+plot(df_weeks2$week,df_weeks2$inventory, col="black", xlab = "Week", type="b",lwd=2, pch=15, 
+     ylab = "Inventory Size") 
