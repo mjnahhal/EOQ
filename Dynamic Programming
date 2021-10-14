@@ -6,16 +6,20 @@ d=df_weeks$forecasting
 sigma=df_weeks$sigma
 
 H=5 # Inventory Holding Cost
-S=250 # Ordering costs
+S=125 # Ordering costs
 
 z=1.645 # service level (95%)
 
-for (ijk in 1:33) # dynamic calculations until the week 33
+ 
+df_weeks$Expected_costs=0
+
+for (ijk in 1:35) # dynamic calculations until the week 33
 {
 
+  
   if (ijk==1)
   { 
-    Po=752 # will be changed later
+    Po=752
     PO=752 
   } else {
      d=df_weeks$forecasting[ijk:50]
@@ -40,11 +44,11 @@ for(i in 1:T)
 
 #########
 
-KK=sum(Po>D[1,] + z*SIG[1,]) # KK is initial period length
+KK=sum(Po>D[1,] + z*SIG[1,]) # initial period
 
 if(KK>=1)
 {
-  Po=Po-D[1,KK]
+  Po=Po-D[1,KK] # expected Residual inventory
 
   C=0.5*KK/52*H*D[1,KK]+KK/52*H*Po
   
@@ -120,15 +124,16 @@ for (o in 2:T)
 
 print("Total Costs")
 print(min(OF_o[,T+1])+C)
+df_weeks$Expected_costs[ijk]=min(OF_o[,T+1])+C
 
 n=which.min(OF_o[,T+1])
 nn=order(1:n,decreasing = T)
 
-xi=1:n
+xi=1:n # initial definition
 Costs=1:n
 
 
-Costs[nn[1]]= OF_o[nn[1],T+1]
+Costs[nn[1]]= OF_o[nn[1],T+1] # Costs without C
 xi[nn[1]]=wi_o[nn[1],T+1]
 
 for (j in 2:n)
@@ -141,15 +146,15 @@ Costs[nn[j]]=OF_o[nn[j],xi[nn[j-1]]]
 xi[nn[j]]=wi_o[nn[j],xi[nn[j-1]]] 
 }
 
-xj=c(xi[2:n]-1,T)
+xj=c(xi[2:n]-1,T) # neglecting KK and ijk
 
 print("Number of Lots")
 print(n)
 print("Weeks Assignment")
 print("Weeks Start")
-print(xi+KK)
+print(xi+KK+ijk-1)
 print("Weeks End")
-print(xj+KK)
+print(xj+KK+ijk-1)
 
 print("Safety Stock")
 for (j in 1:n)
@@ -166,11 +171,22 @@ df_weeks2=df_weeks[ijk:nrow(df_weeks),]
 df_weeks2$Q=0
 df_weeks2$Q[xi[j]+KK]=D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  Po
 
+if(ijk==1)
+{
+  df_weeks$EOQ=0
+} else
+  df_weeks$EOQ[ijk:nrow(df_weeks)]=0
+
+df_weeks$EOQ[xi[j]+KK+ijk-1]=D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  Po # fixed
+
+
 for (j in 2:n)
 {
   print(D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  SS[xi[j-1],xj[j-1]]  )
   
   df_weeks2$Q[xi[j]+KK]=D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  SS[xi[j-1],xj[j-1]]
+  
+  df_weeks$EOQ[xi[j]+KK+ijk-1]=D[ xi[j],xj[j] ] + SS[xi[j],xj[j]]  -  SS[xi[j-1],xj[j-1]]
 }
 
 df_weeks2$inventory=PO
@@ -179,5 +195,27 @@ df_weeks2$inventory=df_weeks2$inventory-cumsum(df_weeks2$Weekly_Demand)+cumsum(d
 
 }
 
-plot(df_weeks2$week,df_weeks2$inventory, col="black", xlab = "Week", type="b",lwd=2, pch=15, 
-     ylab = "Inventory Size") 
+df_weeks$Final_inventory=752
+
+df_weeks$Final_inventory=df_weeks$Final_inventory-cumsum(df_weeks$Weekly_Demand)+cumsum(df_weeks$EOQ)
+
+
+plot(df_weeks$week,df_weeks$Final_inventory, col=(df_weeks$Final_inventory>0)+2, 
+     xlab = "Week", type="b",lwd=2, pch=(df_weeks$Final_inventory>0)+14, 
+     ylab = "Inventory Size")
+abline(v = ijk, lty=2, lwd=3)
+
+x=df_weeks$EOQ
+x[x==0] <- NA
+plot(df_weeks$week,x,  
+     xlab = "Week", type="h",lwd=2, col="blue", ylim = c(0, max(x, na.rm = T)+10),
+     ylab = "Lot Size")
+abline(v = ijk, lty=2, lwd=3)
+
+mean(x,na.rm = T)
+sum(x>1, na.rm=T)
+
+#Total Costs
+sum(df_weeks$Final_inventory)*H/52+S*sum(x>1, na.rm=T)
+
+
