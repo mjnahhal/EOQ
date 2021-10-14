@@ -13,7 +13,7 @@ z=1.645 # service level (95%)
  
 df_weeks$Expected_costs=0
 
-for (ijk in 1:35) # dynamic calculations until the week 33
+for (ijk in 1:35) # dynamic calculations until the week 35
 {
 
   
